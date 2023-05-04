@@ -2,14 +2,14 @@ mod config;
 mod torrents;
 mod middleware;
 use std::ops::DerefMut;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use log::{info, warn};
-
+use lru::LruCache;
 
 use crate::config::AppConfig;
-use crate::torrents::{Torrents};
+use crate::torrents::{Torrent, Torrents};
 
 async fn verify_session(config: &AppConfig) -> Result<()> {
     let endpoint = format!("{}/auth/verify", config.endpoint);
@@ -21,64 +21,111 @@ async fn verify_session(config: &AppConfig) -> Result<()> {
     }
 }
 
-async fn fetch_and_process_torrents(config: &AppConfig) -> Result<()> {
-    // Fetch torrents from the API
-    verify_session(config).await?;
-    let endpoint = format!("{}/torrents", config.endpoint);
-    let resp = config.client.get(endpoint).send().await?.json::<Torrents>().await?;
-    println!("Processing {} torrents", resp.torrents.len());
+async fn fetch_torrents(app_config: &AppConfig) -> Result<Torrents> {
+    verify_session(app_config).await?;
+    let endpoint = format!("{}/torrents", app_config.endpoint);
+    app_config
+        .client
+        .get(endpoint)
+        .send().await?
+        .json::<Torrents>().await
+        .map_err(|e| e.into())
+}
 
-    // Lock and obtain the torrent_map for mutation
-    let mut cache_guard = config.cache.lock().await;
+async fn forget_directory(app_config: &AppConfig, directory: &str) -> Result<()> {
+    app_config
+        .client
+        .post(format!(
+            "{}/vfs/forget?dir={}",
+            app_config.rclone_remote,
+            directory
+        ))
+        .send()
+        .await
+        .context("Error calling vfs/forget")?;
+    Ok(())
+}
+
+fn get_relative_directory(mount_directory: &Path, torrent_directory: &Path) -> PathBuf {
+    if let Ok(relative_directory) = torrent_directory.strip_prefix(mount_directory) {
+        info!(
+            "Removing {} from {}",
+            mount_directory.display(),
+            torrent_directory.display()
+        );
+        relative_directory.to_path_buf()
+    } else {
+        warn!(
+            "Torrent directory {} is not a child of mount directory {}",
+            torrent_directory.display(),
+            mount_directory.display()
+        );
+        torrent_directory.to_path_buf()
+    }
+}
+
+async fn process_torrent_addition(
+    app_config: &AppConfig,
+    torrent_map: &mut LruCache<String, Torrent>,
+    hash: &str,
+    torrent: &Torrent,
+) {
+    let directory = get_relative_directory(&app_config.mount_directory, &torrent.directory);
+    let torrent_dir_str = directory.to_str().unwrap_or("/");
+    forget_directory(app_config, torrent_dir_str).await.unwrap_or_else(|e| {
+        warn!("Failed to forget directory {}: {:?}", torrent_dir_str, e)
+    });
+
+    info!(
+        "New torrent: {} {} {}",
+        torrent.name, torrent.percent_complete, torrent.directory.display()
+    );
+    torrent_map.put(hash.to_string(), torrent.clone());
+}
+
+async fn process_torrent_update(
+    app_config: &AppConfig,
+    prev_torrent: &Torrent,
+    new_torrent: &Torrent,
+) {
+    if new_torrent.percent_complete != prev_torrent.percent_complete {
+        info!(
+            "Percent complete changed for {} from {} to {}",
+            new_torrent.name,
+            prev_torrent.percent_complete,
+            new_torrent.percent_complete
+        );
+
+        let torrent_dir = get_relative_directory(&app_config.mount_directory, &new_torrent.directory);
+        let torrent_dir_str = torrent_dir.to_str().unwrap_or("/");
+
+        forget_directory(app_config, torrent_dir_str).await.unwrap_or_else(|e| {
+            warn!("Failed to forget directory {}: {:?}", torrent_dir_str, e)
+        });
+    }
+}
+
+async fn process_torrents(app_config: &AppConfig, torrents: Torrents) -> Result<()> {
+    let mut cache_guard = app_config.cache.lock().await;
     let torrent_map = cache_guard.deref_mut();
 
-    for (hash, torrent) in resp.torrents {
-        if let Some(prev_torrent) = torrent_map.get(&hash) {
-            // Call vfs/forget if percent_complete has changed
-            if torrent.percent_complete != prev_torrent.percent_complete {
-                info!("Percent complete changed for {} from {} to {}", torrent.name, prev_torrent.percent_complete, torrent.percent_complete);
-
-                let torrent_dir = match torrent.directory.strip_prefix(&config.mount_directory) {
-                    Ok(dir) => {
-                        if dir == torrent.directory {
-                            torrent.directory
-                                .strip_prefix(&Path::new("/")
-                                    .join(&config.mount_directory))
-                                .unwrap_or(&torrent.directory)
-                        } else {
-                            dir
-                        }
-                    }
-                    Err(_) => {
-                        warn!("Torrent directory {} is not a child of mount directory {}", torrent.directory.display(), config.mount_directory.display());
-                        &torrent.directory
-                    }
-                };
-
-                info!("Calling vfs/forget for {}", torrent_dir.display());
-                // if torrent_dir contains a non-utf8 character, just forget the whole thing
-                let torrent_dir_str = match torrent_dir.to_str().unwrap_or_default() {
-                    "" => "/",
-                    s => s,
-                };
-
-                config.client
-                    .post(format!("{}/vfs/forget?dir={}", config.rclone_remote, torrent_dir_str))
-                    .send()
-                    .await?;
-            }
-        } else {
-            // Call vfs/forget for new torrent
-            config.client
-                .post(format!("{}/vfs/forget?dir={}", config.rclone_remote, torrent.directory.display()))
-                .send()
-                .await?;
-            info!("New Torrent {} {} {}", torrent.name, torrent.percent_complete, torrent.directory.display());
-            torrent_map.put(hash.clone(), torrent);
+    for (hash, torrent) in torrents.torrents {
+        match torrent_map.get(&hash) {
+            Some(prev_torrent) => process_torrent_update(app_config, prev_torrent, &torrent).await,
+            None => process_torrent_addition(app_config, torrent_map, &hash, &torrent).await,
         }
     }
     Ok(())
 }
+
+async fn fetch_and_process_torrents(app_config: &AppConfig) -> Result<()> {
+    let torrents = fetch_torrents(app_config).await.context("Error fetching torrents")?;
+    info!("Processing {} torrents", torrents.torrents.len());
+    process_torrents(app_config, torrents).await?;
+
+    Ok(())
+}
+
 
 async fn torrent_poller(config: AppConfig) {
     let interval = tokio::time::Duration::from_secs(config.poll_interval);
