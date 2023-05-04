@@ -2,8 +2,11 @@ mod config;
 mod torrents;
 mod middleware;
 use std::ops::DerefMut;
+use std::path::Path;
+
 use anyhow::Result;
-use log::info;
+use log::{info, warn};
+
 
 use crate::config::AppConfig;
 use crate::torrents::{Torrents};
@@ -31,29 +34,49 @@ async fn fetch_and_process_torrents(config: &AppConfig) -> Result<()> {
 
     for (hash, torrent) in resp.torrents {
         if let Some(prev_torrent) = torrent_map.get(&hash) {
+            // Call vfs/forget if percent_complete has changed
             if torrent.percent_complete != prev_torrent.percent_complete {
                 info!("Percent complete changed for {} from {} to {}", torrent.name, prev_torrent.percent_complete, torrent.percent_complete);
-                // remove the mount directory from the torrent directory
-                let torrent_dir = torrent.directory.replace(&config.mount_directory, "");
-                // Call vfs/forget if percent_complete has changed
-                info!("Calling vfs/forget for {}", torrent_dir);
+
+                let torrent_dir = match torrent.directory.strip_prefix(&config.mount_directory) {
+                    Ok(dir) => {
+                        if dir == torrent.directory {
+                            torrent.directory
+                                .strip_prefix(&Path::new("/")
+                                    .join(&config.mount_directory))
+                                .unwrap_or(&torrent.directory)
+                        } else {
+                            dir
+                        }
+                    }
+                    Err(_) => {
+                        warn!("Torrent directory {} is not a child of mount directory {}", torrent.directory.display(), config.mount_directory.display());
+                        &torrent.directory
+                    }
+                };
+
+                info!("Calling vfs/forget for {}", torrent_dir.display());
+                // if torrent_dir contains a non-utf8 character, just forget the whole thing
+                let torrent_dir_str = match torrent_dir.to_str().unwrap_or_default() {
+                    "" => "/",
+                    s => s,
+                };
+
                 config.client
-                    .post(format!("{}/vfs/forget?dir={}", config.rclone_remote, torrent_dir))
+                    .post(format!("{}/vfs/forget?dir={}", config.rclone_remote, torrent_dir_str))
                     .send()
                     .await?;
             }
         } else {
             // Call vfs/forget for new torrent
             config.client
-                .post(format!("{}/vfs/forget?dir={}", config.rclone_remote, torrent.directory))
+                .post(format!("{}/vfs/forget?dir={}", config.rclone_remote, torrent.directory.display()))
                 .send()
                 .await?;
-            info!("New Torrent {} {} {}", torrent.name, torrent.percent_complete, torrent.directory);
+            info!("New Torrent {} {} {}", torrent.name, torrent.percent_complete, torrent.directory.display());
             torrent_map.put(hash.clone(), torrent);
         }
-
     }
-
     Ok(())
 }
 

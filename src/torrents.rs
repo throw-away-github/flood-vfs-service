@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
 use serde_enum_str::{Deserialize_enum_str, Serialize_enum_str};
 
@@ -20,7 +21,7 @@ pub struct Torrent {
     date_created: i64,
     #[serde(rename = "dateFinished")]
     date_finished: i64,
-    pub(crate) directory: String,
+    pub(crate) directory: PathBuf,
     #[serde(rename = "downRate")]
     down_rate: i64,
     #[serde(rename = "downTotal")]
@@ -59,24 +60,6 @@ pub struct Torrent {
     up_total: i64,
 }
 
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub enum Status {
-//     #[serde(rename = "complete")]
-//     Complete,
-//     #[serde(rename = "downloading")]
-//     Downloading,
-//     #[serde(rename = "error")]
-//     Error,
-//     #[serde(rename = "Active")]
-//     Active,
-//     #[serde(rename = "inactive")]
-//     Inactive,
-//     #[serde(rename = "seeding")]
-//     Seeding,
-//     #[serde(rename = "stopped")]
-//     Stopped,
-// }
-// rewrite to use serde-enum-str crate
 #[derive(Deserialize_enum_str, Serialize_enum_str, Debug, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {

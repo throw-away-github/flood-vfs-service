@@ -1,17 +1,19 @@
 use std::env;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
+use std::path::PathBuf;
 use lru::LruCache;
+use reqwest::Url;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use tokio::sync::Mutex;
 use crate::middleware;
 use crate::torrents::Torrent;
 
 pub struct AppConfig {
-    pub(crate) endpoint: String,
+    pub(crate) endpoint: Url,
     pub(crate) poll_interval: u64,
-    pub(crate) rclone_remote: String,
-    pub(crate) mount_directory: String,
+    pub(crate) rclone_remote: Url,
+    pub(crate) mount_directory: PathBuf,
     pub(crate) client: ClientWithMiddleware,
     pub(crate) cache: Arc<Mutex<LruCache<String, Torrent>>>,
 }
@@ -22,6 +24,10 @@ impl AppConfig {
             Ok(endpoint) => endpoint,
             Err(e) => panic!("ENDPOINT env var not set: {:?}", e),
         };
+        let endpoint = match Url::parse(&endpoint) {
+            Ok(url) => url,
+            Err(e) => panic!("ENDPOINT is not a valid url: {:?}", e),
+        };
         let poll_interval = env::var("POLL_INTERVAL")
             .unwrap_or_default()
             .parse().unwrap_or(60);
@@ -29,7 +35,11 @@ impl AppConfig {
             Ok(remote) => remote,
             Err(e) => panic!("RCLONE_REMOTE env var not set: {:?}", e),
         };
-        let mount_directory = env::var("MOUNT_DIRECTORY").unwrap_or_default();
+        let rclone_remote = match Url::parse(&rclone_remote) {
+            Ok(url) => url,
+            Err(e) => panic!("RCLONE_REMOTE is not a valid url: {:?}", e),
+        };
+        let mount_directory = PathBuf::from(env::var("MOUNT_DIRECTORY").unwrap_or_default());
         // create a reqwest client to use for all requests
         const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
