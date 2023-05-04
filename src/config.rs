@@ -2,9 +2,9 @@ use std::env;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use lru::LruCache;
-use reqwest_tracing::TracingMiddleware;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use tokio::sync::Mutex;
+use crate::middleware;
 use crate::torrents::Torrent;
 
 pub struct AppConfig {
@@ -39,7 +39,7 @@ impl AppConfig {
             .build()
             .unwrap();
         let client = ClientBuilder::new(client)
-            .with(TracingMiddleware::default())
+            .with(middleware::LoggingMiddleware)
             .build();
 
         let cache = Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap())));

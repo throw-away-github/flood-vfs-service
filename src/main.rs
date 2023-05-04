@@ -3,6 +3,7 @@ mod torrents;
 mod middleware;
 use std::ops::DerefMut;
 use anyhow::Result;
+use log::info;
 
 use crate::config::AppConfig;
 use crate::torrents::{Torrents};
@@ -31,11 +32,11 @@ async fn fetch_and_process_torrents(config: &AppConfig) -> Result<()> {
     for (hash, torrent) in resp.torrents {
         if let Some(prev_torrent) = torrent_map.get(&hash) {
             if torrent.percent_complete != prev_torrent.percent_complete {
-                println!("Percent complete changed for {} from {} to {}", torrent.name, prev_torrent.percent_complete, torrent.percent_complete);
+                info!("Percent complete changed for {} from {} to {}", torrent.name, prev_torrent.percent_complete, torrent.percent_complete);
                 // remove the mount directory from the torrent directory
                 let torrent_dir = torrent.directory.replace(&config.mount_directory, "");
                 // Call vfs/forget if percent_complete has changed
-                println!("Calling vfs/forget for {}", torrent_dir);
+                info!("Calling vfs/forget for {}", torrent_dir);
                 config.client
                     .post(format!("{}/vfs/forget?dir={}", config.rclone_remote, torrent_dir))
                     .send()
@@ -47,12 +48,11 @@ async fn fetch_and_process_torrents(config: &AppConfig) -> Result<()> {
                 .post(format!("{}/vfs/forget?dir={}", config.rclone_remote, torrent.directory))
                 .send()
                 .await?;
-            println!("New Torrent {} {} {}", torrent.name, torrent.percent_complete, torrent.directory);
+            info!("New Torrent {} {} {}", torrent.name, torrent.percent_complete, torrent.directory);
             torrent_map.put(hash.clone(), torrent);
         }
 
     }
-
 
     Ok(())
 }
@@ -61,16 +61,13 @@ async fn torrent_poller(config: AppConfig) {
     let interval = tokio::time::Duration::from_secs(config.poll_interval);
     loop {
         tokio::time::sleep(interval).await;
-        if let Err(e) = fetch_and_process_torrents(&config).await {
-            eprintln!("Error: {:?}", e);
-        }
+        fetch_and_process_torrents(&config).await.unwrap_or_default();
     }
 }
 
 #[tokio::main]
 async fn main() {
-    // TODO: figure out how to use the tracing output
-    // middleware::init_logger().await.unwrap();
+    middleware::init_logger().await.unwrap();
     let config = AppConfig::from_env();
 
     // Pass the shared cache to the torrent_poller
