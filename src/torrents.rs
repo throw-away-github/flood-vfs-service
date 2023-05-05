@@ -27,7 +27,7 @@ pub struct Torrent {
     #[serde(rename = "downTotal")]
     down_total: i64,
     eta: i64,
-    hash: String,
+    pub(crate) hash: String,
     #[serde(rename = "isPrivate")]
     is_private: bool,
     #[serde(rename = "isInitialSeeding")]
