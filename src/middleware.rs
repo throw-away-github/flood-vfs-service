@@ -1,5 +1,7 @@
 use std::str::FromStr;
 use std::time::Instant;
+use colored::Colorize;
+use std::io::Write;
 
 use log::{Level, LevelFilter};
 use log::{debug, error};
@@ -11,18 +13,12 @@ use reqwest_middleware::{Middleware, Next};
 use task_local_extensions::Extensions;
 
 #[allow(dead_code)]
-pub(crate) async fn init_logger() -> Result<(), Box<dyn std::error::Error>> {
-    use colored::*;
-    use env_logger::Builder;
-    use std::io::Write;
+pub(crate) async fn init_logger() -> anyhow::Result<()> {
+    let log_filter = std::env::var("RUST_APP_LOG")
+        .map(|log_filter| LevelFilter::from_str(&log_filter))
+        .unwrap_or_else(|_| Ok(LevelFilter::Info))?;
 
-    let filter = if let Ok(log_filter) = std::env::var("RUST_APP_LOG") {
-        LevelFilter::from_str(&log_filter).unwrap_or(LevelFilter::Info)
-    } else {
-        LevelFilter::Info
-    };
-
-    let logger = Builder::new()
+    env_logger::Builder::new()
         .format(move |buf, record| {
             let level = match record.level() {
                 Level::Error => record.level().to_string().red().bold(),
@@ -39,13 +35,9 @@ pub(crate) async fn init_logger() -> Result<(), Box<dyn std::error::Error>> {
                 m = record.args()
             )
         })
-        .filter(None, filter)
-        .try_init();
-
-    if let Err(e) = logger {
-        error!("Failed to initialize logger: {}", e);
-        return Err(Box::new(e));
-    }
+        .filter(None, log_filter)
+        .try_init()
+        .map_err(|e| anyhow::anyhow!("Failed to initialize logger: {}", e))?;
 
     Ok(())
 }
