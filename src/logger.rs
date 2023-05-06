@@ -22,7 +22,7 @@ impl ColorLevel for Level {
 
 // Initialize application-level logger
 pub(crate) async fn init_logger() -> anyhow::Result<()> {
-    let log_filter = std::env::var("RUST_APP_LOG")
+    let log_filter = std::env::var("LOG_LEVEL")
         .map(|log_filter| LevelFilter::from_str(&log_filter))
         .unwrap_or_else(|_| {
             println!("Log Level Defaulting to {}", ColorLevel::color(&Level::Info));

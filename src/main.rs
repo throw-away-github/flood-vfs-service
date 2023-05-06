@@ -7,7 +7,7 @@ use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use log::{info, warn};
+use log::{error, info, trace, warn};
 
 use crate::config::AppConfig;
 use crate::torrents::{Torrent, Torrents};
@@ -49,7 +49,7 @@ async fn forget_directory(app_config: &AppConfig, directory: &str) -> Result<()>
 
 fn get_relative_directory(mount_directory: &Path, torrent_directory: &Path) -> PathBuf {
     if let Ok(relative_directory) = torrent_directory.strip_prefix(mount_directory) {
-        info!(
+        trace!(
             "Removing {} from {}",
             mount_directory.display(),
             torrent_directory.display()
@@ -77,13 +77,13 @@ async fn process_torrent_addition(
     app_config: &AppConfig,
     torrent: &Torrent,
 ) {
-    forget_torrent(app_config, torrent).await;
     info!(
         "New torrent: {} {} {}",
         torrent.name,
         torrent.percent_complete,
         torrent.directory.display()
     );
+    forget_torrent(app_config, torrent).await;
 }
 
 async fn process_torrent_update(
@@ -133,7 +133,7 @@ async fn torrent_poller(config: AppConfig) {
     loop {
         tokio::time::sleep(interval).await;
         fetch_and_process_torrents(&config).await.unwrap_or_else(|e| {
-            warn!("Error fetching torrents: {:?}", e);
+            error!("Error fetching torrents: {:?}", e);
         });
     }
 }
