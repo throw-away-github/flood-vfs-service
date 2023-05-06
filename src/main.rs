@@ -78,7 +78,9 @@ async fn process_torrent_addition(
     forget_torrent(app_config, torrent).await;
     info!(
         "New torrent: {} {} {}",
-        torrent.name, torrent.percent_complete, torrent.directory.display()
+        torrent.name,
+        torrent.percent_complete,
+        torrent.directory.display()
     );
 }
 
@@ -104,8 +106,10 @@ async fn process_torrents(app_config: &AppConfig, torrents: Torrents) -> Result<
 
     for (hash, torrent) in torrents.torrents {
         match torrent_map.get(&hash) {
-            Some(prev_torrent) => process_torrent_update(app_config, prev_torrent, &torrent).await,
-            None => process_torrent_addition(app_config, &torrent).await,
+            Some(prev_torrent) =>
+                process_torrent_update(app_config, prev_torrent, &torrent).await,
+            None =>
+                process_torrent_addition(app_config, &torrent).await,
         }
         torrent_map.put(hash, torrent);
     }
@@ -126,7 +130,9 @@ async fn torrent_poller(config: AppConfig) {
     let interval = tokio::time::Duration::from_secs(config.poll_interval);
     loop {
         tokio::time::sleep(interval).await;
-        fetch_and_process_torrents(&config).await.unwrap_or_default();
+        fetch_and_process_torrents(&config).await.unwrap_or_else(|e| {
+            warn!("Error fetching torrents: {:?}", e);
+        });
     }
 }
 
