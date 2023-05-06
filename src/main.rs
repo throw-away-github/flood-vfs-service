@@ -1,6 +1,8 @@
 mod config;
 mod torrents;
 mod middleware;
+mod logger;
+
 use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 
@@ -138,7 +140,7 @@ async fn torrent_poller(config: AppConfig) {
 
 #[tokio::main]
 async fn main() {
-    middleware::init_logger().await.unwrap();
+    logger::init_logger().await.unwrap();
     let config = AppConfig::from_env();
 
     // Pass the shared cache to the torrent_poller
