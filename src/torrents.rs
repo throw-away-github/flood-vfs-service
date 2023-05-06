@@ -74,12 +74,16 @@ pub enum Status {
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Deserialize_enum_str, Serialize_enum_str, Debug, Clone)]
 pub enum Tag {
     #[serde(rename = "radarr")]
     Radarr,
+    #[serde(rename = "radarr4K")]
+    Radarr4K,
     #[serde(rename = "radarr_imported")]
     RadarrImported,
+    #[serde(rename = "radarr4K_imported")]
+    Radarr4KImported,
     #[serde(rename = "sonarr")]
     Sonarr,
     #[serde(rename = "sonarr4K")]
@@ -90,4 +94,6 @@ pub enum Tag {
     SonarrImported,
     #[serde(rename = "sonarr4k_imported")]
     TagSonarr4KImported,
+    #[serde(other)]
+    Other(String),
 }
