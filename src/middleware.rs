@@ -1,10 +1,9 @@
+use std::str::FromStr;
 use std::time::Instant;
 
-use log::LevelFilter;
+use log::{Level, LevelFilter};
 use log::{debug, error};
-use log4rs::append::console::ConsoleAppender;
-use log4rs::config::{Appender, Config, Root};
-use log4rs::encode::pattern::PatternEncoder;
+
 use reqwest::Response;
 use reqwest::{Request, StatusCode};
 
@@ -13,24 +12,44 @@ use task_local_extensions::Extensions;
 
 #[allow(dead_code)]
 pub(crate) async fn init_logger() -> Result<(), Box<dyn std::error::Error>> {
-    // Configure log4rs
-    let console_appender = ConsoleAppender::builder()
-        .encoder(Box::new(PatternEncoder::new("{d(%Y-%m-%d %H:%M:%S %Z)(utc)} [{l}] {m}{n}")))
-        .build();
+    use colored::*;
+    use env_logger::Builder;
+    use std::io::Write;
 
-    let config = Config::builder()
-        .appender(Appender::builder().build("console", Box::new(console_appender)))
-        .build(
-            Root::builder()
-                .appender("console")
-                .build(LevelFilter::Debug),
-        )
-        .unwrap();
+    let filter = if let Ok(log_filter) = std::env::var("RUST_APP_LOG") {
+        LevelFilter::from_str(&log_filter).unwrap_or(LevelFilter::Info)
+    } else {
+        LevelFilter::Info
+    };
 
-    log4rs::init_config(config).unwrap();
+    let logger = Builder::new()
+        .format(move |buf, record| {
+            let level = match record.level() {
+                Level::Error => record.level().to_string().red().bold(),
+                Level::Warn => record.level().to_string().yellow().bold(),
+                Level::Info => record.level().to_string().cyan(),
+                Level::Debug => record.level().to_string().magenta().dimmed(),
+                _ => record.level().to_string().dimmed(),
+            };
+            writeln!(
+                buf,
+                "{d} [{l}] {m}",
+                d = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S %Z"),
+                l = level,
+                m = record.args()
+            )
+        })
+        .filter(None, filter)
+        .try_init();
+
+    if let Err(e) = logger {
+        error!("Failed to initialize logger: {}", e);
+        return Err(Box::new(e));
+    }
 
     Ok(())
 }
+
 
 async fn log_request(request: &Request) {
     // Log request details
