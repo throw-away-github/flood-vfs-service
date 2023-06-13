@@ -36,10 +36,9 @@ impl Middleware for LoggingMiddleware {
                 );
                 debug!("Request took: {:?}", start.elapsed());
             }
-            Err(e) => {
-                error!("Request failed: {}", e);
-            }
+            Err(e) => error!("Request failed: {}", e),
         }
+
         response
     }
 }

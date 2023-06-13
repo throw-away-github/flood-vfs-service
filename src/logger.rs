@@ -1,5 +1,5 @@
-use log::{Level, LevelFilter};
 use colored::Colorize;
+use log::{Level, LevelFilter};
 use std::io::Write;
 use std::str::FromStr;
 
@@ -25,7 +25,10 @@ pub(crate) async fn init_logger() -> anyhow::Result<()> {
     let log_filter = std::env::var("LOG_LEVEL")
         .map(|log_filter| LevelFilter::from_str(&log_filter))
         .unwrap_or_else(|_| {
-            println!("Log Level Defaulting to {}", ColorLevel::color(&Level::Info));
+            println!(
+                "Log Level Defaulting to {}",
+                ColorLevel::color(&Level::Info)
+            );
             Ok(LevelFilter::Info)
         })?;
 

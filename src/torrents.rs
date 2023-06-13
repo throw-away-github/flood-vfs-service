@@ -1,7 +1,7 @@
+use serde::{Deserialize, Serialize};
+use serde_enum_str::{Deserialize_enum_str, Serialize_enum_str};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
-use serde_enum_str::{Deserialize_enum_str, Serialize_enum_str};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Torrents {
@@ -72,7 +72,6 @@ pub enum Status {
     #[serde(other)]
     Other(String),
 }
-
 
 #[derive(Deserialize_enum_str, Serialize_enum_str, Debug, Clone)]
 pub enum Tag {

@@ -1,13 +1,13 @@
-use std::env;
-use std::num::NonZeroUsize;
-use std::sync::Arc;
-use std::path::PathBuf;
+use crate::middleware;
+use crate::torrents::Torrent;
 use lru::LruCache;
 use reqwest::Url;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use std::env;
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::sync::Mutex;
-use crate::middleware;
-use crate::torrents::Torrent;
 
 pub struct AppConfig {
     pub(crate) endpoint: Url,
@@ -30,7 +30,8 @@ impl AppConfig {
         };
         let poll_interval = env::var("POLL_INTERVAL")
             .unwrap_or_default()
-            .parse().unwrap_or(60);
+            .parse()
+            .unwrap_or(60);
         let rclone_remote = match env::var("RCLONE_REMOTE") {
             Ok(remote) => remote,
             Err(e) => panic!("RCLONE_REMOTE env var not set: {:?}", e),

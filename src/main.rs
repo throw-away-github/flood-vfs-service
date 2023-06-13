@@ -1,7 +1,7 @@
 mod config;
-mod torrents;
-mod middleware;
 mod logger;
+mod middleware;
+mod torrents;
 
 use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
@@ -28,8 +28,10 @@ async fn fetch_torrents(app_config: &AppConfig) -> Result<Torrents> {
     app_config
         .client
         .get(endpoint)
-        .send().await?
-        .json::<Torrents>().await
+        .send()
+        .await?
+        .json::<Torrents>()
+        .await
         .map_err(|e| e.into())
 }
 
@@ -38,8 +40,7 @@ async fn forget_directory(app_config: &AppConfig, directory: &str) -> Result<()>
         .client
         .post(format!(
             "{}/vfs/forget?dir={}",
-            app_config.rclone_remote,
-            directory
+            app_config.rclone_remote, directory
         ))
         .send()
         .await
@@ -68,15 +69,12 @@ fn get_relative_directory(mount_directory: &Path, torrent_directory: &Path) -> P
 async fn forget_torrent(app_config: &AppConfig, torrent: &Torrent) {
     let directory = get_relative_directory(&app_config.mount_directory, &torrent.directory);
     let directory_str = directory.to_str().unwrap_or("/torrents");
-    forget_directory(app_config, directory_str).await.unwrap_or_else(|e| {
-        warn!("Failed to forget directory {}: {:?}", directory_str, e)
-    });
+    forget_directory(app_config, directory_str)
+        .await
+        .unwrap_or_else(|e| warn!("Failed to forget directory {}: {:?}", directory_str, e));
 }
 
-async fn process_torrent_addition(
-    app_config: &AppConfig,
-    torrent: &Torrent,
-) {
+async fn process_torrent_addition(app_config: &AppConfig, torrent: &Torrent) {
     info!(
         "New torrent: {} {} {}",
         torrent.name,
@@ -94,9 +92,7 @@ async fn process_torrent_update(
     if new_torrent.percent_complete != prev_torrent.percent_complete {
         info!(
             "Percent complete changed for {} from {} to {}",
-            new_torrent.name,
-            prev_torrent.percent_complete,
-            new_torrent.percent_complete
+            new_torrent.name, prev_torrent.percent_complete, new_torrent.percent_complete
         );
         forget_torrent(app_config, new_torrent).await;
     }
@@ -108,10 +104,8 @@ async fn process_torrents(app_config: &AppConfig, torrents: Torrents) -> Result<
 
     for (hash, torrent) in torrents.torrents {
         match torrent_map.get(&hash) {
-            Some(prev_torrent) =>
-                process_torrent_update(app_config, prev_torrent, &torrent).await,
-            None =>
-                process_torrent_addition(app_config, &torrent).await,
+            Some(prev_torrent) => process_torrent_update(app_config, prev_torrent, &torrent).await,
+            None => process_torrent_addition(app_config, &torrent).await,
         }
         torrent_map.put(hash, torrent);
     }
@@ -119,7 +113,9 @@ async fn process_torrents(app_config: &AppConfig, torrents: Torrents) -> Result<
 }
 
 async fn fetch_and_process_torrents(app_config: &AppConfig) -> Result<()> {
-    let torrents = fetch_torrents(app_config).await.context("Error fetching torrents")?;
+    let torrents = fetch_torrents(app_config)
+        .await
+        .context("Error fetching torrents")?;
     let size = torrents.torrents.len();
     info!("Processing {} torrents", size);
     let start = tokio::time::Instant::now();
@@ -132,9 +128,11 @@ async fn torrent_poller(config: AppConfig) {
     let interval = tokio::time::Duration::from_secs(config.poll_interval);
     loop {
         tokio::time::sleep(interval).await;
-        fetch_and_process_torrents(&config).await.unwrap_or_else(|e| {
-            error!("Error fetching torrents: {:?}", e);
-        });
+        fetch_and_process_torrents(&config)
+            .await
+            .unwrap_or_else(|e| {
+                error!("Error fetching torrents: {:?}", e);
+            });
     }
 }
 
@@ -146,4 +144,3 @@ async fn main() {
     // Pass the shared cache to the torrent_poller
     torrent_poller(config).await;
 }
-
