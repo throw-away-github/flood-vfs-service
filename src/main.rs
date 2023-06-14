@@ -9,12 +9,12 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use log::{error, info, trace, warn};
 
-use crate::config::AppConfig;
+use crate::config::AppState;
 use crate::torrents::{Torrent, Torrents};
 
-async fn verify_session(config: &AppConfig) -> Result<()> {
-    let endpoint = format!("{}/auth/verify", config.endpoint);
-    let resp = config.client.get(endpoint).send().await?;
+async fn verify_session(app_state: &AppState) -> Result<()> {
+    let endpoint = format!("{}/auth/verify", app_state.endpoint);
+    let resp = app_state.client.get(endpoint).send().await?;
     if resp.status().is_success() {
         Ok(())
     } else {
@@ -22,10 +22,10 @@ async fn verify_session(config: &AppConfig) -> Result<()> {
     }
 }
 
-async fn fetch_torrents(app_config: &AppConfig) -> Result<Torrents> {
-    verify_session(app_config).await?;
-    let endpoint = format!("{}/torrents", app_config.endpoint);
-    app_config
+async fn fetch_torrents(app_state: &AppState) -> Result<Torrents> {
+    verify_session(app_state).await?;
+    let endpoint = format!("{}/torrents", app_state.endpoint);
+    app_state
         .client
         .get(endpoint)
         .send()
@@ -35,12 +35,12 @@ async fn fetch_torrents(app_config: &AppConfig) -> Result<Torrents> {
         .map_err(|e| e.into())
 }
 
-async fn forget_directory(app_config: &AppConfig, directory: &str) -> Result<()> {
-    app_config
+async fn forget_directory(app_state: &AppState, directory: &str) -> Result<()> {
+    app_state
         .client
         .post(format!(
             "{}/vfs/forget?dir={}",
-            app_config.rclone_remote, directory
+            app_state.rclone_remote, directory
         ))
         .send()
         .await
@@ -66,26 +66,26 @@ fn get_relative_directory(mount_directory: &Path, torrent_directory: &Path) -> P
     }
 }
 
-async fn forget_torrent(app_config: &AppConfig, torrent: &Torrent) {
-    let directory = get_relative_directory(&app_config.mount_directory, &torrent.directory);
+async fn forget_torrent(app_state: &AppState, torrent: &Torrent) {
+    let directory = get_relative_directory(&app_state.mount_directory, &torrent.directory);
     let directory_str = directory.to_str().unwrap_or("/torrents");
-    forget_directory(app_config, directory_str)
+    forget_directory(app_state, directory_str)
         .await
         .unwrap_or_else(|e| warn!("Failed to forget directory {}: {:?}", directory_str, e));
 }
 
-async fn process_torrent_addition(app_config: &AppConfig, torrent: &Torrent) {
+async fn process_torrent_addition(app_state: &AppState, torrent: &Torrent) {
     info!(
         "New torrent: {} {} {}",
         torrent.name,
         torrent.percent_complete,
         torrent.directory.display()
     );
-    forget_torrent(app_config, torrent).await;
+    forget_torrent(app_state, torrent).await;
 }
 
 async fn process_torrent_update(
-    app_config: &AppConfig,
+    app_state: &AppState,
     prev_torrent: &Torrent,
     new_torrent: &Torrent,
 ) {
@@ -94,41 +94,41 @@ async fn process_torrent_update(
             "Percent complete changed for {} from {} to {}",
             new_torrent.name, prev_torrent.percent_complete, new_torrent.percent_complete
         );
-        forget_torrent(app_config, new_torrent).await;
+        forget_torrent(app_state, new_torrent).await;
     }
 }
 
-async fn process_torrents(app_config: &AppConfig, torrents: Torrents) -> Result<()> {
-    let mut cache_guard = app_config.cache.lock().await;
+async fn process_torrents(app_state: &AppState, torrents: Torrents) -> Result<()> {
+    let mut cache_guard = app_state.cache.lock().await;
     let torrent_map = cache_guard.deref_mut();
 
     for (hash, torrent) in torrents.torrents {
         match torrent_map.get(&hash) {
-            Some(prev_torrent) => process_torrent_update(app_config, prev_torrent, &torrent).await,
-            None => process_torrent_addition(app_config, &torrent).await,
+            Some(prev_torrent) => process_torrent_update(app_state, prev_torrent, &torrent).await,
+            None => process_torrent_addition(app_state, &torrent).await,
         }
         torrent_map.put(hash, torrent);
     }
     Ok(())
 }
 
-async fn fetch_and_process_torrents(app_config: &AppConfig) -> Result<()> {
-    let torrents = fetch_torrents(app_config)
+async fn fetch_and_process_torrents(app_state: &AppState) -> Result<()> {
+    let torrents = fetch_torrents(app_state)
         .await
         .context("Error fetching torrents")?;
     let size = torrents.torrents.len();
     info!("Processing {} torrents", size);
     let start = tokio::time::Instant::now();
-    process_torrents(app_config, torrents).await?;
+    process_torrents(app_state, torrents).await?;
     info!("Processed {} torrents in {:?}", size, start.elapsed());
     Ok(())
 }
 
-async fn torrent_poller(config: AppConfig) {
-    let interval = tokio::time::Duration::from_secs(config.poll_interval);
+async fn torrent_poller(app_state: AppState) {
+    let interval = tokio::time::Duration::from_secs(app_state.poll_interval);
     loop {
         tokio::time::sleep(interval).await;
-        fetch_and_process_torrents(&config)
+        fetch_and_process_torrents(&app_state)
             .await
             .unwrap_or_else(|e| {
                 error!("Error fetching torrents: {:?}", e);
@@ -139,8 +139,8 @@ async fn torrent_poller(config: AppConfig) {
 #[tokio::main]
 async fn main() {
     logger::init_logger().await.unwrap();
-    let config = AppConfig::from_env();
+    let app_state = AppState::from_env();
 
     // Pass the shared cache to the torrent_poller
-    torrent_poller(config).await;
+    torrent_poller(app_state).await;
 }

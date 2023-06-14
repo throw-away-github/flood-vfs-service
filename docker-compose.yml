@@ -23,7 +23,7 @@ services:
     image: index.docker.io/tcbrooks/reverse-proxy:latest
     hostname: cf.access-proxy
     ports:
-      - "15141:8080"
+      - "15141:80"
     environment:
       - CFAccess__ClientId=${CF_CLIENT_ID}
       - CFAccess__ClientSecret=${CF_CLIENT_SECRET}
