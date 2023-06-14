@@ -18,7 +18,6 @@ services:
       - POLL_INTERVAL=${POLL_INTERVAL}
       - RCLONE_REMOTE=${RCLONE_REMOTE}
       - MOUNT_DIRECTORY=${MOUNT_DIRECTORY}
-      - MOUNT_OPTIONS=${MOUNT_OPTIONS}
   cf.access-proxy:
     image: index.docker.io/tcbrooks/reverse-proxy:latest
     hostname: cf.access-proxy
