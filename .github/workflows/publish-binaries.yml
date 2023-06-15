@@ -39,6 +39,6 @@ jobs:
         with:
           bin: flood-vfs-service
           tar: unix
-          zip: windows,macos
+          zip: windows
           target: ${{ matrix.target }}
           token: ${{ secrets.GITHUB_TOKEN }}
