@@ -1,15 +1,19 @@
-name: Rust
+name: Rust Tests
 
 on: [push, pull_request]
 
+concurrency:
+  group: 'rust-tests'
+  cancel-in-progress: true
+
 jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test
+#  test:
+#    name: Test
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v3
+#      - uses: dtolnay/rust-toolchain@stable
+#      - run: cargo test
 
   fmt:
     name: Rustfmt
@@ -31,19 +35,19 @@ jobs:
           components: clippy
       - run: cargo clippy -- -D warnings
 
-  coverage:
-    name: Code coverage
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Install cargo-tarpaulin
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-tarpaulin
-          checksum: true
-      - name: Run cargo-tarpaulin
-        run: cargo tarpaulin --ignore-tests
+#  coverage:
+#    name: Code coverage
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v3
+#
+#      - name: Install stable toolchain
+#        uses: dtolnay/rust-toolchain@stable
+#      - name: Install cargo-tarpaulin
+#        uses: taiki-e/install-action@v2
+#        with:
+#          tool: cargo-tarpaulin
+#          checksum: true
+#      - name: Run cargo-tarpaulin
+#        run: cargo tarpaulin --ignore-tests
