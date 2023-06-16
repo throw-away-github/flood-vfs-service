@@ -21,11 +21,11 @@ reqwest = { version = "0.11.17", features = [ "json", "cookies"] }
 log4rs = "1.2.0"
 log = "0.4.17"
 async-trait = "0.1.68"
-reqwest-middleware = "0.1.6"
+reqwest-middleware = "0.2.2"
 dotenv = "0.15.0"
 colored = "2.0.0"
 env_logger = "0.10.0"
 chrono = "0.4.24"
 structopt = "0.3.26"
 
-openssl = { version = "0.10.40", features = ["vendored"] }
+openssl = { version = "0.10", features = ["vendored"] }
